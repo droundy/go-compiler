@@ -25,8 +25,27 @@ type Header struct {
 type Section struct {
 }
 
+func (h *Header) TextOffset() Ptr {
+	return elf_header_size + 2*phentsize
+}
+func (h *Header) TextAddr() Ptr {
+	return h.TextOffset()
+}
+
+func (h *Header) DataOffset() Ptr {
+	return h.TextOffset() + Ptr(len(h.Text))
+}
+func (h *Header) DataAddr() Ptr {
+	return (h.DataOffset()/Page + 1)*Page
+}
+
+const (
+	elf_header_size = 36 + 16
+	phentsize = 8*4
+)
+
 func (h *Header) WriteTo(w io.Writer) (err os.Error) {
-	var off Ptr = 36+16 // This starts out as the offset to right after the header!
+	var off Ptr = elf_header_size // This starts out as the offset to right after the header!
 	// e_ident is sixteen bytes
 	_,err = w.Write([]byte("\x7fELF\001\001\001\000\000\000\000\000\000\000\000\000"))
 	if err != nil { return }
@@ -62,7 +81,6 @@ func (h *Header) WriteTo(w io.Writer) (err os.Error) {
 	if err = binary.Write(w, binary.LittleEndian, uint16(off)); err != nil {
 		return
 	}
-	const phentsize = 8*4
 	// e_phentsize = 8*4
 	if err = binary.Write(w, binary.LittleEndian, uint16(phentsize)); err != nil {
 		return
@@ -83,13 +101,10 @@ func (h *Header) WriteTo(w io.Writer) (err os.Error) {
 	if err = binary.Write(w, binary.LittleEndian, uint16(0)); err != nil {
 		return
 	}
-	text_offset := off + 2*phentsize
-	if err = WriteProgramHeaderText(w, text_offset, text_offset, h.Text); err != nil {
+	if err = WriteProgramHeaderText(w, h.TextOffset(), h.TextAddr(), h.Text); err != nil {
 		return
 	}
-	data_offset := text_offset + Ptr(len(h.Text))
-	data_vaddr := (data_offset/Page + 1)*Page
-	if err = WriteProgramHeaderText(w, data_offset, data_vaddr, h.Text); err != nil {
+	if err = WriteProgramHeaderText(w, h.DataOffset(), h.DataAddr(), h.Text); err != nil {
 		return
 	}
 	_,err = w.Write(h.Text)
