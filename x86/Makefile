@@ -3,10 +3,9 @@
 
 include $(GOROOT)/src/Make.inc
 
-DEPS=elf x86
+TARG=github.com/droundy/go/x86
 
-TARG=go
 GOFILES=\
-	go.go\
+	x86.go\
 
-include $(GOROOT)/src/Make.cmd
+include $(GOROOT)/src/Make.pkg
