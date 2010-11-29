@@ -42,6 +42,10 @@ type W8 interface {
 	W8() string
 }
 
+type Ptr interface {
+	Ptr() string
+}
+
 // And now we come to the concrete types.
 
 // A Comment is the most boring part of assembly, but pretty useful
@@ -80,6 +84,36 @@ func (s Symbol) W16() string {
 }
 func (s Symbol) W32() string {
 	return "$" + string(s)
+}
+func (s Symbol) Ptr() string {
+	return string(s)
+}
+
+// Memory is an in-memory reference
+
+type Memory struct {
+	offset W32
+	base Ptr
+	index, scale W32
+}
+func (m Memory) W32() string {
+	offstr := ""
+	if m.offset != nil {
+		offstr = m.offset.W32()
+	}
+	bstr := ""
+	if m.base != nil {
+		bstr = m.base.Ptr()
+	}
+	istr := ""
+	if m.index != nil {
+		istr = m.index.W32()
+	}
+	scalestr := ""
+	if m.scale != nil {
+		scalestr = ", " + m.scale.W32()
+	}
+	return offstr + "(" + bstr + "," + istr + scalestr + ")"
 }
 
 // A Register refers to a general-purpose register, of which the x86
@@ -126,6 +160,9 @@ func (r Register) W16() string {
 	return "%" + r.String()
 }
 func (r Register) W32() string {
+	return "%e" + r.String()
+}
+func (r Register) Ptr() string {
 	return "%e" + r.String()
 }
 
@@ -182,6 +219,14 @@ func Int(val W32) X86 {
 	return OpL1{"int", val}
 }
 
+func PopL(dest W32) X86 {
+	return OpL1{"popl", dest}
+}
+
+func PushL(src W32) X86 {
+	return OpL1{"pushl", src}
+}
+
 // A Section is... a section.
 
 type Section string
@@ -204,6 +249,13 @@ func (a Ascii) X86() (out string) {
 	}
 	out += `"`
 	return
+}
+
+// Int is just raw 32-bit number...
+
+type GlobalInt int32
+func (a GlobalInt) X86() string {
+	return "\t.int\t" + fmt.Sprint(a)
 }
 
 // SymbolicConstant defines a symbolic constant...

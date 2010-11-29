@@ -16,11 +16,25 @@ func die(err os.Error) {
 
 var hello = []x86.X86{
 	x86.Section("data"),
+	//x86.Symbol("xxmksyscall"),
+	//x86.Commented(x86.GlobalInt(0),
+	//	"This is a global variable for the address for syscalls"),
+	//x86.Symbol("xxargs"),
+	//x86.Commented(x86.GlobalInt(0),
+	//	"This is the number of args"),
+	//x86.Commented(x86.GlobalInt(0),
+	//	"This is a pointer to the actual args"),
+
 	x86.Symbol("msg"),
 	x86.Commented(x86.Ascii("Hello, world!\n"), "a non-null-terminated string"),
 	x86.Commented(x86.SymbolicConstant(x86.Symbol("len"), ". - msg"), "length of string"),
 	x86.Section("text"),
 	x86.Commented(x86.GlobalSymbol("_start"), "this says where to start execution"),
+
+	//x86.Comment("Search for mksyscall value in the ELF auxiliary vectors..."),
+	//x86.Commented(x86.MovL(x86.ESP, x86.EBP), "Save stack pointer for later."),
+	//x86.Commented(x86.MovL(x86.ESP, x86.Symbol("len")), "Save value of argc."),
+
 	x86.Comment("Print string..."),
 	x86.Commented(x86.MovL(x86.Symbol("len"), x86.EDX), "third argument: data length"),
 	x86.Commented(x86.MovL(x86.Symbol("msg"), x86.ECX), "second argument: pointer to data"),
