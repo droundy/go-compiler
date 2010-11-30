@@ -92,28 +92,34 @@ func (s Symbol) Ptr() string {
 // Memory is an in-memory reference
 
 type Memory struct {
-	offset W32
-	base Ptr
-	index, scale W32
+	Disp Ptr
+	Base W32
+	Index W32
+	Scale Ptr
 }
 func (m Memory) W32() string {
 	offstr := ""
-	if m.offset != nil {
-		offstr = m.offset.W32()
+	if m.Disp != nil {
+		offstr = m.Disp.Ptr()
 	}
 	bstr := ""
-	if m.base != nil {
-		bstr = m.base.Ptr()
+	if m.Base != nil {
+		bstr = m.Base.W32()
 	}
 	istr := ""
-	if m.index != nil {
-		istr = m.index.W32()
+	if m.Index != nil {
+		istr = ", " + m.Index.W32()
 	}
 	scalestr := ""
-	if m.scale != nil {
-		scalestr = ", " + m.scale.W32()
+	if m.Scale != nil {
+		scalestr = ", " + m.Scale.Ptr()
+	} else if m.Base == nil && m.Index == nil {
+		scalestr = ", 1"
 	}
-	return offstr + "(" + bstr + "," + istr + scalestr + ")"
+	return offstr + "(" + bstr + istr + scalestr + ")"
+}
+func (m Memory) Ptr() string {
+	return m.W32()
 }
 
 // A Register refers to a general-purpose register, of which the x86
@@ -172,6 +178,9 @@ type Imm32 int32
 func (i Imm32) W32() string {
 	return "$" + fmt.Sprint(i)
 }
+func (i Imm32) Ptr() string {
+	return fmt.Sprint(i)
+}
 
 // Imm16 represents an immediate 16-bit value
 
@@ -187,20 +196,45 @@ func (i Imm8) W8() string {
 	return "$" + fmt.Sprint(i)
 }
 
-// OpL2 holds any two-argument instructions involving 32-bit
-// arguments.  It shouldn't need to be exported, but it could also
-// come in handy at some stage...
+// OpL2 holds any two-argument instructions involving 32-bit arguments
+// of with the latter is an "output" argument.  It shouldn't need to
+// be exported, but it could also come in handy at some stage...
 
 type OpL2 struct {
 	name string
-	src, dest W32
+	src W32
+	dest Ptr
 }
 func (o OpL2) X86() string {
-	return "\t" + o.name + " " + o.src.W32() + ", " + o.dest.W32()
+	return "\t" + o.name + " " + o.src.W32() + ", " + o.dest.Ptr()
 }
 
-func MovL(src, dest W32) X86 {
+func MovL(src W32, dest Ptr) X86 {
 	return OpL2{"movl", src, dest}
+}
+
+func AddL(src W32, dest Ptr) X86 {
+	return OpL2{"addl", src, dest}
+}
+
+func IMulL(src W32, dest Ptr) X86 {
+	return OpL2{"imull", src, dest}
+}
+
+// OpLL holds any two-argument instructions involving 32-bit arguments
+// in which either could be immediate.  It shouldn't need to be
+// exported, but it could also come in handy at some stage...
+
+type OpLL struct {
+	name string
+	src1, src2 W32
+}
+func (o OpLL) X86() string {
+	return "\t" + o.name + " " + o.src1.W32() + ", " + o.src2.W32()
+}
+
+func CmpL(src W32, dest W32) X86 {
+	return OpLL{"cmpl", src, dest}
 }
 
 // OpL1 holds any instruction involving a single 32-bit argument.  It
@@ -225,6 +259,22 @@ func PopL(dest W32) X86 {
 
 func PushL(src W32) X86 {
 	return OpL1{"pushl", src}
+}
+
+// OpL1 holds any instruction involving a single argument that must be
+// an address.  It shouldn't need to be exported, but it could also
+// come in handy at some stage...
+
+type OpP1 struct {
+	name string
+	arg Ptr
+}
+func (o OpP1) X86() string {
+	return "\t" + o.name + " " + o.arg.Ptr()
+}
+
+func Jne(src Ptr) X86 {
+	return OpP1{"jne", src}
 }
 
 // A Section is... a section.
