@@ -76,13 +76,111 @@ var hello = []x86.X86{
 	x86.Commented(x86.MovL(x86.Imm32(4), x86.EAX), "system call number (sys_write)"),
 	x86.Int(x86.Imm32(0x80)),
 
+	x86.Commented(x86.MovL(x86.Imm32(10), x86.EAX), "system call number (sys_write)"),
+	x86.Call(x86.Symbol("debug.print_eax")),
+
 	x86.Comment("And exit..."),
 	x86.Commented(x86.MovL(x86.Imm32(0), x86.EBX), "first argument: exit code"),
 	x86.Commented(x86.MovL(x86.Imm32(1), x86.EAX), "system call number (sys_exit)"),
 	x86.Int(x86.Imm32(0x80)),
 }
 
+var debug = []x86.X86{
+	x86.Comment("Debug utility routines!"),
+
+	x86.Symbol("debug.print_eax"),
+	x86.Commented(x86.PushL(x86.EDX), "Save registers..."),
+	x86.PushL(x86.ECX),
+	x86.PushL(x86.EBX),
+	x86.PushL(x86.EAX),
+
+	x86.Commented(x86.MovL(x86.ESP, x86.ECX), "second argument: pointer to data"),
+	x86.Commented(x86.AddL(x86.Imm32(-20), x86.ECX), "here I set up %ecx as my string pointer"),
+
+	x86.MovL(x86.EAX, x86.EBX),
+	x86.AndL(x86.Imm32(0xF), x86.EBX),
+	x86.ShiftLeftL(x86.Imm32(24), x86.EBX),
+	x86.Commented(x86.AddL(x86.Imm32('0' << 24), x86.EBX), "least significant hex"),
+
+	x86.MovL(x86.EAX, x86.EDX),
+	x86.AndL(x86.Imm32(0xF << 4), x86.EDX),
+	x86.AddL(x86.Imm32('0' << 4), x86.EDX),
+	x86.ShiftLeftL(x86.Imm32(12), x86.EDX),
+	x86.Commented(x86.AddL(x86.EDX, x86.EBX), "second most significant hex"),
+
+	x86.MovL(x86.EAX, x86.EDX),
+	x86.AndL(x86.Imm32(0xF << 8), x86.EDX),
+	x86.AddL(x86.Imm32('0' << 8), x86.EDX),
+	x86.Commented(x86.AddL(x86.EDX, x86.EBX), "third most significant hex"),
+
+	x86.MovL(x86.EAX, x86.EDX),
+	x86.AndL(x86.Imm32(0xF << 12), x86.EDX),
+	x86.AddL(x86.Imm32('0' << 12), x86.EDX),
+	x86.ShiftRightL(x86.Imm32(12), x86.EDX),
+	x86.Commented(x86.AddL(x86.EDX, x86.EBX), "fourth most significant hex"),
+
+	x86.Commented(x86.MovL(x86.EBX, x86.Memory{x86.Imm32(8), x86.ECX, nil, nil}),
+		"Store four bytes of hex notation, which covers 16 bits of EAX"),
+
+	x86.MovL(x86.EAX, x86.EDX),
+	x86.AndL(x86.Imm32(0xF << 16), x86.EDX),
+	x86.AddL(x86.Imm32('0' << 16), x86.EDX),
+	x86.ShiftRightL(x86.Imm32(16), x86.EDX),
+	x86.Commented(x86.MovL(x86.EDX, x86.EBX), "fifth most significant hex"),
+
+	x86.MovL(x86.EAX, x86.EDX),
+	x86.AndL(x86.Imm32(0xF << 20), x86.EDX),
+	x86.AddL(x86.Imm32('0' << 20), x86.EDX),
+	x86.ShiftRightL(x86.Imm32(12), x86.EDX),
+	x86.Commented(x86.AddL(x86.EDX, x86.EBX), "sixth most significant hex"),
+
+	x86.MovL(x86.EAX, x86.EDX),
+	x86.AndL(x86.Imm32(0xF << 24), x86.EDX),
+	x86.AddL(x86.Imm32('0' << 24), x86.EDX),
+	x86.ShiftRightL(x86.Imm32(8), x86.EDX),
+	x86.Commented(x86.AddL(x86.EDX, x86.EBX), "seventh most significant hex"),
+
+	x86.MovL(x86.EAX, x86.EDX),
+	x86.ShiftRightL(x86.Imm32(4), x86.EDX),
+	x86.AndL(x86.Imm32(0xF << 24), x86.EDX),
+	x86.AddL(x86.Imm32('0' << 24), x86.EDX),
+	x86.Commented(x86.AddL(x86.EDX, x86.EBX), "eighth most significant hex"),
+
+	x86.Commented(x86.MovL(x86.EBX, x86.Memory{x86.Imm32(4), x86.ECX, nil, nil}),
+		"Store four more bytes of hex notation, which covers the last 16 bits of EAX"),
+	x86.Commented(x86.MovL(x86.Imm32('\n'), x86.Memory{x86.Imm32(12), x86.ECX, nil, nil}),
+		"Add newline"),
+	x86.Commented(x86.MovL(x86.Imm32('e' + 'a' << 8 + 'x' << 16 + ':' << 24), x86.Memory{nil, x86.ECX, nil, nil}),
+		"Add prefix"),
+
+	x86.Commented(x86.MovL(x86.Imm32(13), x86.EDX), "third argument: data length"),
+	x86.Commented(x86.MovL(x86.Imm32(1), x86.EBX), "first argument: file handle (stdout)"),
+	x86.Commented(x86.MovL(x86.Imm32(4), x86.EAX), "system call number (sys_write)"),
+	x86.Int(x86.Imm32(0x80)),
+
+	x86.Commented(x86.PopL(x86.EAX), "Restore saved registers..."),
+	x86.PopL(x86.EBX),
+	x86.PopL(x86.ECX),
+	x86.PopL(x86.EDX),
+	x86.Return("from debug.print_eax"),
+}
+
 func main() {
-	fmt.Println(x86.Assembly(hello))
-	die(elf.AssembleAndLink("foo", []byte(x86.Assembly(hello))))
+	ass := x86.Assembly(concat(hello,debug))
+	fmt.Println(ass)
+	die(elf.AssembleAndLink("foo", []byte(ass)))
+}
+
+func concat(codes ...[]x86.X86) []x86.X86 {
+	ltot := 0;
+	for _,code := range codes {
+		ltot += len(code)
+	}
+	out := make([]x86.X86, ltot)
+	here := out
+	for _,code := range codes {
+		copy(here, code)
+		here = here[len(code):]
+	}
+	return out
 }

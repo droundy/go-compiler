@@ -217,6 +217,18 @@ func AddL(src W32, dest Ptr) X86 {
 	return OpL2{"addl", src, dest}
 }
 
+func AndL(src W32, dest Ptr) X86 {
+	return OpL2{"andl", src, dest}
+}
+
+func ShiftLeftL(src W32, dest Ptr) X86 {
+	return OpL2{"shll", src, dest}
+}
+
+func ShiftRightL(src W32, dest Ptr) X86 {
+	return OpL2{"shrl", src, dest}
+}
+
 func IMulL(src W32, dest Ptr) X86 {
 	return OpL2{"imull", src, dest}
 }
@@ -261,6 +273,17 @@ func PushL(src W32) X86 {
 	return OpL1{"pushl", src}
 }
 
+type Op0 struct {
+	name, comment string
+}
+func (o Op0) X86() string {
+	return "\t" + o.name + "\t# " + o.comment
+}
+
+func Return(com string) X86 {
+	return Op0{ "ret", com }
+}
+
 // OpL1 holds any instruction involving a single argument that must be
 // an address.  It shouldn't need to be exported, but it could also
 // come in handy at some stage...
@@ -275,6 +298,10 @@ func (o OpP1) X86() string {
 
 func Jne(src Ptr) X86 {
 	return OpP1{"jne", src}
+}
+
+func Call(src Ptr) X86 {
+	return OpP1{"call", src}
 }
 
 // A Section is... a section.
