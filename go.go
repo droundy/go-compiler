@@ -1,11 +1,57 @@
 package main
 
 import (
-	"fmt"
 	"os"
+	"fmt"
+	"go/ast"
+	"go/token"
+	"go/parser"
+	"go/printer"
+	"go/typechecker"
 	"github.com/droundy/go/elf"
 	"github.com/droundy/go/x86"
+	"github.com/droundy/goopt"
 )
+
+type StringVisitor int
+func (v StringVisitor) Visit(n0 interface{}) (w ast.Visitor) {
+	if n,ok := n0.(*ast.BasicLit); ok && n.Kind == token.STRING {
+		fmt.Println("Found a literal...", string(n.Value))
+	}
+	return v
+}
+
+type CallVisitor int
+func (v CallVisitor) Visit(n0 interface{}) (w ast.Visitor) {
+	if n,ok := n0.(*ast.CallExpr); ok && len(n.Args) == 1 {
+		if fn,ok := n.Fun.(*ast.Ident); ok && fn.Name == "println" {
+			fmt.Println("Found a println", n.Args[0])
+		}
+	}
+	return v
+}
+
+func main() {
+	goopt.Parse(func() []string { return nil })
+	if len(goopt.Args) > 0 {
+		x,err := parser.ParseFiles(goopt.Args, 0)
+		die(err)
+		fmt.Fprintln(os.Stderr, "Parsed: ", *x["main"])
+		die(typechecker.CheckPackage(x["main"], nil))
+		fmt.Fprintln(os.Stderr, "Checked: ", *x["main"])
+		for _,a := range x["main"].Files {
+			die(printer.Fprint(os.Stdout, a))
+		}
+		ast.Walk(StringVisitor(0), x["main"])
+		ast.Walk(CallVisitor(0), x["main"])
+
+		// Here's where we should be compiling the program...
+		ass := x86.Assembly(concat(hello,x86.Debugging))
+		fmt.Println(ass)
+		die(elf.AssembleAndLink(goopt.Args[0][:len(goopt.Args[0])-3], []byte(ass)))
+	}
+}
+
 
 func die(err os.Error) {
 	if err != nil {
@@ -83,12 +129,6 @@ var hello = []x86.X86{
 	x86.Commented(x86.MovL(x86.Imm32(0), x86.EBX), "first argument: exit code"),
 	x86.Commented(x86.MovL(x86.Imm32(1), x86.EAX), "system call number (sys_exit)"),
 	x86.Int(x86.Imm32(0x80)),
-}
-
-func main() {
-	ass := x86.Assembly(concat(hello,x86.Debugging))
-	fmt.Println(ass)
-	die(elf.AssembleAndLink("foo", []byte(ass)))
 }
 
 func concat(codes ...[]x86.X86) []x86.X86 {

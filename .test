@@ -6,4 +6,23 @@ make
 
 ./go
 
-./foo
+rm -rf .testdir
+mkdir .testdir
+cd .testdir
+
+for gof in `ls ../tests | egrep '\.go$'`; do
+    echo ======================
+    echo Testing $gof
+    echo ======================
+    echo cp ../tests/$gof .
+    cp ../tests/$gof .
+    echo ../go $gof
+    ../go $gof
+    if test -f ../tests/$gof.sh; then
+        echo bash ../tests/$gof.sh
+        bash ../tests/$gof.sh
+    fi
+    echo ======================
+    echo Passed $gof
+done
+
