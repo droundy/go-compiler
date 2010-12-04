@@ -1,6 +1,6 @@
 package x86
 
-var Start = []X86{
+var StartData = []X86{
 	Section("data"),
 	Symbol("goc.syscall"),
 	Commented(GlobalInt(0),
@@ -15,6 +15,9 @@ var Start = []X86{
 	Symbol("msg"),
 	Commented(Ascii("Hello, world!\n"), "a non-null-terminated string"),
 	Commented(SymbolicConstant(Symbol("len"), ". - msg"), "length of string"),
+}
+
+var StartText = []X86{
 	Section("text"),
 	Commented(GlobalSymbol("_start"), "this says where to start execution"),
 	Call(Symbol("main_main")),

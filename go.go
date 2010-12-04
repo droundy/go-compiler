@@ -60,14 +60,18 @@ func main() {
 		for _,a := range x["main"].Files {
 			die(printer.Fprint(os.Stdout, a))
 		}
+
+		instructions := x86.StartData
 		ast.Walk(StringVisitor(0), x["main"])
 		ast.Walk(CallVisitor(0), x["main"])
 
-		instructions := CompileVisitor(x86.Start)
-		ast.Walk(&instructions, x["main"])
+		instructions = concat(instructions, x86.StartText)
+		cv := CompileVisitor(instructions)
+		ast.Walk(&cv, x["main"])
+		instructions = []x86.X86(cv)
 
 		// Here we just add a crude debug library
-		ass := x86.Assembly(concat([]x86.X86(instructions),x86.Debugging))
+		ass := x86.Assembly(concat(instructions,x86.Debugging))
 		//fmt.Println(ass)
 		die(elf.AssembleAndLink(goopt.Args[0][:len(goopt.Args[0])-3], []byte(ass)))
 	}
