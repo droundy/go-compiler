@@ -1,5 +1,29 @@
 package x86
 
+var Start = []X86{
+	Section("data"),
+	Symbol("goc.syscall"),
+	Commented(GlobalInt(0),
+		"This is a global variable for the address for syscalls"),
+	Symbol("goc.args"),
+	Commented(GlobalInt(0),
+		"This is the number of args"),
+	Symbol("goc.argsptr"),
+	Commented(GlobalInt(0),
+		"This is a pointer to the actual args"),
+
+	Symbol("msg"),
+	Commented(Ascii("Hello, world!\n"), "a non-null-terminated string"),
+	Commented(SymbolicConstant(Symbol("len"), ". - msg"), "length of string"),
+	Section("text"),
+	Commented(GlobalSymbol("_start"), "this says where to start execution"),
+	Call(Symbol("main_main")),
+	Comment("And exit..."),
+	Commented(MovL(Imm32(0), EBX), "first argument: exit code"),
+	Commented(MovL(Imm32(1), EAX), "system call number (sys_exit)"),
+	Int(Imm32(0x80)),
+}
+
 var Debugging = []X86{
 	RawAssembly(`
 #  Debug utility routines!

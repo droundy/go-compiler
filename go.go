@@ -31,6 +31,24 @@ func (v CallVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 	return v
 }
 
+type CompileVisitor []x86.X86
+func (v *CompileVisitor) Visit(n0 interface{}) (w ast.Visitor) {
+	// The following only handles functions (not methods)
+	if n,ok := n0.(*ast.FuncDecl); ok && n.Recv == nil {
+		*v = append(*v, x86.Commented(x86.GlobalSymbol("main_"+n.Name.Name), "from where?"))
+		for _,statement := range n.Body.List {
+			if _,ok := statement.(*ast.EmptyStmt); ok {
+				// It is empty, I can handle that!
+			} else {
+				panic(fmt.Sprintf("I can't handle statements such as: %T", statement))
+			}
+		}
+		*v = append(*v, x86.Return("from main_"+n.Name.Name))
+		return nil // No need to peek inside the func declaration!
+	}
+	return v
+}
+
 func main() {
 	goopt.Parse(func() []string { return nil })
 	if len(goopt.Args) > 0 {
@@ -45,9 +63,12 @@ func main() {
 		ast.Walk(StringVisitor(0), x["main"])
 		ast.Walk(CallVisitor(0), x["main"])
 
-		// Here's where we should be compiling the program...
-		ass := x86.Assembly(concat(hello,x86.Debugging))
-		fmt.Println(ass)
+		instructions := CompileVisitor(x86.Start)
+		ast.Walk(&instructions, x["main"])
+
+		// Here we just add a crude debug library
+		ass := x86.Assembly(concat([]x86.X86(instructions),x86.Debugging))
+		//fmt.Println(ass)
 		die(elf.AssembleAndLink(goopt.Args[0][:len(goopt.Args[0])-3], []byte(ass)))
 	}
 }
