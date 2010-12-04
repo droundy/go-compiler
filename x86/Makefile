@@ -7,5 +7,6 @@ TARG=github.com/droundy/go/x86
 
 GOFILES=\
 	x86.go\
+	debugging.go\
 
 include $(GOROOT)/src/Make.pkg
