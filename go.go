@@ -97,7 +97,11 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 				v.CompileExpression(e.Args[0])
 				v.Append(x86.RawAssembly("\tcall println"))
 			default:
-				panic(fmt.Sprintf("I don't know how to deal with function: %s", e.Fun))
+				// This must not be a built-in function...
+				if len(e.Args) != 0 {
+					panic("I don't know how to handle functions with arguments yet...")
+				}
+				v.Append(x86.RawAssembly("\tcall main_"+fn.Name+" # FIXME this assumes no return value!"))
 			}
 		} else {
 			panic(fmt.Sprintf("I don't know how to deal with complicated function: %s", e.Fun))
