@@ -65,6 +65,11 @@ func (v *CompileVisitor) CompileStatement(statement ast.Stmt) {
 		// It is empty, I can handle that!
 	case *ast.ExprStmt:
 		v.CompileExpression(s.X)
+	case *ast.ReturnStmt:
+		if len(s.Results) != 0 {
+			panic("I can't handle return statements with values just yet...")
+		}
+		v.Append(x86.Return("from where?"))
 	default:
 		panic(fmt.Sprintf("I can't handle statements such as: %T", statement))
 	}
