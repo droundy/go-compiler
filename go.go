@@ -17,7 +17,8 @@ import (
 
 type StringVisitor CompileVisitor
 func (v StringVisitor) Visit(n0 interface{}) (w ast.Visitor) {
-	if n,ok := n0.(*ast.BasicLit); ok && n.Kind == token.STRING {
+	//fmt.Printf("in StringVisitor, n0 is %s of type %T\n", n0, n0)
+	if n,ok := n0.(*ast.BasicLit); ok && n != nil && n.Kind == token.STRING {
 		str,err := strconv.Unquote(string(n.Value))
 		if err != nil {
 			panic(err)
