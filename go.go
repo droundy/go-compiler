@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"fmt"
+	"strings"
+	"unicode"
 	"go/ast"
 	"go/token"
 	"go/parser"
@@ -13,10 +15,23 @@ import (
 	"github.com/droundy/goopt"
 )
 
-type StringVisitor int
+type StringVisitor CompileVisitor
 func (v StringVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 	if n,ok := n0.(*ast.BasicLit); ok && n.Kind == token.STRING {
-		fmt.Println("Found a literal...", string(n.Value))
+		str := string(n.Value)
+		sanitize := func(rune int) int {
+			if unicode.IsLetter(rune) {
+				return rune
+			}
+			return -1
+		}
+		if _,ok := v.string_literals[str]; !ok {
+			strname := "string_" + strings.Map(sanitize, str)
+			*v.assembly = append(*v.assembly,
+				x86.Symbol(strname),
+				x86.Commented(x86.Ascii(str), "a non-null-terminated string"))
+			v.string_literals[str] = strname
+		}
 	}
 	return v
 }
@@ -31,22 +46,68 @@ func (v CallVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 	return v
 }
 
-type CompileVisitor []x86.X86
+type CompileVisitor struct {
+	assembly *[]x86.X86
+	string_literals map[string]string
+}
+func (v *CompileVisitor) Append(xs... x86.X86) {
+	*v.assembly = append(*v.assembly, xs...)
+}
 func (v *CompileVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 	// The following only handles functions (not methods)
 	if n,ok := n0.(*ast.FuncDecl); ok && n.Recv == nil {
-		*v = append(*v, x86.Commented(x86.GlobalSymbol("main_"+n.Name.Name), "from where?"))
+		v.Append(x86.Commented(x86.GlobalSymbol("main_"+n.Name.Name), "from where?"))
 		for _,statement := range n.Body.List {
-			if _,ok := statement.(*ast.EmptyStmt); ok {
-				// It is empty, I can handle that!
-			} else {
-				panic(fmt.Sprintf("I can't handle statements such as: %T", statement))
-			}
+			v.CompileStatement(statement)
 		}
-		*v = append(*v, x86.Return("from main_"+n.Name.Name))
+		v.Append(x86.Return("from main_"+n.Name.Name))
 		return nil // No need to peek inside the func declaration!
 	}
 	return v
+}
+func (v *CompileVisitor) CompileStatement(statement ast.Stmt) {
+	switch s := statement.(type) {
+	case *ast.EmptyStmt:
+		// It is empty, I can handle that!
+	case *ast.ExprStmt:
+		v.CompileExpression(s.X)
+	default:
+		panic(fmt.Sprintf("I can't handle statements such as: %T", statement))
+	}
+}
+func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
+	switch e := exp.(type) {
+	case *ast.BasicLit:
+		switch e.Kind {
+		case token.STRING:
+			n,ok := v.string_literals[string(e.Value)]
+			if !ok {
+				panic(fmt.Sprintf("I don't recognize the string: %s", string(e.Value)))
+			}
+			v.Append(
+				x86.Commented(x86.PushL(x86.Symbol(n)), "Pushing string literal "+string(e.Value)),
+				x86.PushL(x86.Imm32(len(string(e.Value)))))
+		default:
+			panic(fmt.Sprintf("I don't know how to deal with literal: %s", e))
+		}
+	case *ast.CallExpr:
+		if fn,ok := e.Fun.(*ast.Ident); ok {
+			switch fn.Name {
+			case "println":
+				if len(e.Args) != 1 {
+					panic(fmt.Sprintf("println expects just one argument, not %d", len(e.Args)))
+				}
+				v.CompileExpression(e.Args[0])
+				v.Append(x86.RawAssembly("\tcall println"))
+			default:
+				panic(fmt.Sprintf("I don't know how to deal with function: %s", e.Fun))
+			}
+		} else {
+			panic(fmt.Sprintf("I don't know how to deal with complicated function: %s", e.Fun))
+		}
+	default:
+		panic(fmt.Sprintf("I can't handle expressions such as: %T", exp))
+	}
 }
 
 func main() {
@@ -61,17 +122,17 @@ func main() {
 			die(printer.Fprint(os.Stdout, a))
 		}
 
-		instructions := x86.StartData
-		ast.Walk(StringVisitor(0), x["main"])
+		aaa := x86.StartData
+		var cv = CompileVisitor{assembly: &aaa, string_literals: make(map[string]string)}
+		ast.Walk(StringVisitor(cv), x["main"])
 		ast.Walk(CallVisitor(0), x["main"])
 
-		instructions = concat(instructions, x86.StartText)
-		cv := CompileVisitor(instructions)
+		cv.Append(x86.StartText...)
 		ast.Walk(&cv, x["main"])
-		instructions = []x86.X86(cv)
 
 		// Here we just add a crude debug library
-		ass := x86.Assembly(concat(instructions,x86.Debugging))
+		cv.Append(x86.Debugging...)
+		ass := x86.Assembly(*cv.assembly)
 		//fmt.Println(ass)
 		die(elf.AssembleAndLink(goopt.Args[0][:len(goopt.Args[0])-3], []byte(ass)))
 	}
@@ -154,18 +215,4 @@ var hello = []x86.X86{
 	x86.Commented(x86.MovL(x86.Imm32(0), x86.EBX), "first argument: exit code"),
 	x86.Commented(x86.MovL(x86.Imm32(1), x86.EAX), "system call number (sys_exit)"),
 	x86.Int(x86.Imm32(0x80)),
-}
-
-func concat(codes ...[]x86.X86) []x86.X86 {
-	ltot := 0;
-	for _,code := range codes {
-		ltot += len(code)
-	}
-	out := make([]x86.X86, ltot)
-	here := out
-	for _,code := range codes {
-		copy(here, code)
-		here = here[len(code):]
-	}
-	return out
 }

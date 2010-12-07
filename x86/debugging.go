@@ -31,6 +31,17 @@ var Debugging = []X86{
 	RawAssembly(`
 #  Debug utility routines!
 
+println:
+	movl 4(%esp), %edx # read the length
+	movl 8(%esp), %ecx # pop the pointer to the string
+	movl $1, %ebx	# first argument: file handle (stdout)
+	movl $4, %eax	# system call number (sys_write)
+	int $128
+	popl %eax # store the return address
+  addl 8, %esp # get rid of the two arguments
+	pushl %eax # put the return address back on the stack
+	ret	# from println
+
 debug.print_eax:
 	pushl %edx	# Save registers...
 	pushl %ecx
