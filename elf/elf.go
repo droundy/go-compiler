@@ -21,7 +21,7 @@ func AssembleAndLink(fn string, code []byte) (err os.Error) {
 	if err != nil {
 		return
 	}
-	err = justrun("ld", "-s", "-o", fn, fn+".o")
+	err = justrun("ld", "-o", fn, fn+".o") // "-s",
 	return
 }
 

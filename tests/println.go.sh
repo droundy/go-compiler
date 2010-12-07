@@ -3,6 +3,6 @@
 set -ev
 
 # FIXME: println segfaults!  :(
-#./println
+./println
 
-#./println | grep Hello
+./println | grep Hello

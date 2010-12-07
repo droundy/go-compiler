@@ -38,9 +38,8 @@ println:
 	movl $4, %eax	# system call number (sys_write)
 	int $128
 	popl %eax # store the return address
-  addl 8, %esp # get rid of the two arguments
-	pushl %eax # put the return address back on the stack
-	ret	# from println
+  addl $8, %esp # get rid of the two arguments
+	jmp *%eax # return from println
 
 debug.print_eax:
 	pushl %edx	# Save registers...
