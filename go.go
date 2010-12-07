@@ -94,7 +94,7 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 			}
 			v.Append(
 				x86.Commented(x86.PushL(x86.Symbol(n)), "Pushing string literal "+string(e.Value)),
-				x86.PushL(x86.Imm32(len(string(e.Value)))))
+				x86.PushL(x86.Imm32(len(str))))
 		default:
 			panic(fmt.Sprintf("I don't know how to deal with literal: %s", e))
 		}
