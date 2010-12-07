@@ -4,6 +4,7 @@ import (
 	"os"
 	"fmt"
 	"strings"
+	"strconv"
 	"unicode"
 	"go/ast"
 	"go/token"
@@ -18,7 +19,10 @@ import (
 type StringVisitor CompileVisitor
 func (v StringVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 	if n,ok := n0.(*ast.BasicLit); ok && n.Kind == token.STRING {
-		str := string(n.Value)
+		str,err := strconv.Unquote(string(n.Value))
+		if err != nil {
+			panic(err)
+		}
 		sanitize := func(rune int) int {
 			if unicode.IsLetter(rune) {
 				return rune
@@ -80,7 +84,11 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 	case *ast.BasicLit:
 		switch e.Kind {
 		case token.STRING:
-			n,ok := v.string_literals[string(e.Value)]
+			str,err := strconv.Unquote(string(e.Value))
+			if err != nil {
+				panic(err)
+			}
+			n,ok := v.string_literals[str]
 			if !ok {
 				panic(fmt.Sprintf("I don't recognize the string: %s", string(e.Value)))
 			}
