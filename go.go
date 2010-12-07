@@ -40,21 +40,52 @@ func (v StringVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 	return v
 }
 
+type Stack struct {
+	offset int
+	sizereturn int
+	locals map[string]int
+	function_name string
+}
+
 type CompileVisitor struct {
 	assembly *[]x86.X86
 	string_literals map[string]string
+	stacks []Stack
 }
 func (v *CompileVisitor) Append(xs... x86.X86) {
 	*v.assembly = append(*v.assembly, xs...)
 }
+func (v *CompileVisitor) CurrentStack() Stack {
+	return v.stacks[len(v.stacks)-1]
+}
+func (v *CompileVisitor) FunctionPrologue(fn *ast.FuncDecl) {
+	v.stacks = append(v.stacks, Stack{0,0,make(map[string]int), fn.Name.Name})
+	// symbol for the start name
+	v.Append(x86.Commented(x86.GlobalSymbol("main_"+fn.Name.Name), "from where?"))
+	// If we had arguments, we'd want to swap them with the return
+	// address here...
+}
+func (v *CompileVisitor) FunctionPostlogue() {
+	// First we roll back the stack from where we started...
+	v.Append(x86.AddL(x86.Imm32(v.CurrentStack().offset), x86.ESP))
+	// Now jump to the "real" postlogue.  This is a little stupid, but I
+	// expect it'll come in handy when I implement defer (not to mention
+	// panic/recover).
+	v.Append(x86.Jmp(x86.Symbol("return_" + v.CurrentStack().function_name)))
+}
+
 func (v *CompileVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 	// The following only handles functions (not methods)
 	if n,ok := n0.(*ast.FuncDecl); ok && n.Recv == nil {
-		v.Append(x86.Commented(x86.GlobalSymbol("main_"+n.Name.Name), "from where?"))
+		v.FunctionPrologue(n)
 		for _,statement := range n.Body.List {
 			v.CompileStatement(statement)
 		}
-		v.Append(x86.Return("from main_"+n.Name.Name))
+		v.FunctionPostlogue()
+		v.Append(x86.Commented(x86.GlobalSymbol("return_"+n.Name.Name), "from where?"))
+		// Then we return!
+		v.Append(x86.Return("from main_"+v.CurrentStack().function_name))
+		v.stacks = v.stacks[:len(v.stacks)-1]
 		return nil // No need to peek inside the func declaration!
 	}
 	return v
@@ -69,7 +100,7 @@ func (v *CompileVisitor) CompileStatement(statement ast.Stmt) {
 		if len(s.Results) != 0 {
 			panic("I can't handle return statements with values just yet...")
 		}
-		v.Append(x86.Return("from where?"))
+		v.FunctionPostlogue()
 	default:
 		panic(fmt.Sprintf("I can't handle statements such as: %T", statement))
 	}

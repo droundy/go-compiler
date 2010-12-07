@@ -304,6 +304,10 @@ func Call(src Ptr) X86 {
 	return OpP1{"call", src}
 }
 
+func Jmp(src Ptr) X86 {
+	return OpP1{"jmp", src}
+}
+
 // A Section is... a section.
 
 type Section string
