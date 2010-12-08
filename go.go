@@ -15,6 +15,8 @@ import (
 	"github.com/droundy/goopt"
 )
 
+var myfiles = token.NewFileSet()
+
 type StringVisitor CompileVisitor
 func (v StringVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 	//fmt.Printf("in StringVisitor, n0 is %s of type %T\n", n0, n0)
@@ -61,7 +63,9 @@ func (v *CompileVisitor) CurrentStack() Stack {
 func (v *CompileVisitor) FunctionPrologue(fn *ast.FuncDecl) {
 	v.stacks = append(v.stacks, Stack{0,0,make(map[string]int), fn.Name.Name})
 	// symbol for the start name
-	v.Append(x86.Commented(x86.GlobalSymbol("main_"+fn.Name.Name), "from where?"))
+	pos := myfiles.Position(fn.Pos())
+	v.Append(x86.Commented(x86.GlobalSymbol("main_"+fn.Name.Name),
+		fmt.Sprint(pos.Filename, ": line ", pos.Line)))
 	// If we had arguments, we'd want to swap them with the return
 	// address here...
 }
@@ -82,7 +86,7 @@ func (v *CompileVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 			v.CompileStatement(statement)
 		}
 		v.FunctionPostlogue()
-		v.Append(x86.Commented(x86.GlobalSymbol("return_"+n.Name.Name), "from where?"))
+		v.Append(x86.GlobalSymbol("return_"+n.Name.Name))
 		// Then we return!
 		v.Append(x86.Return("from main_"+v.CurrentStack().function_name))
 		v.stacks = v.stacks[:len(v.stacks)-1]
@@ -126,19 +130,23 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 		}
 	case *ast.CallExpr:
 		if fn,ok := e.Fun.(*ast.Ident); ok {
+			pos := myfiles.Position(fn.Pos())
 			switch fn.Name {
 			case "println":
 				if len(e.Args) != 1 {
 					panic(fmt.Sprintf("println expects just one argument, not %d", len(e.Args)))
 				}
 				v.CompileExpression(e.Args[0])
-				v.Append(x86.RawAssembly("\tcall println"))
+				v.Append(x86.Commented(x86.Call(x86.Symbol("println")),
+					fmt.Sprint(pos.Filename, ": line ", pos.Line)))
 			default:
 				// This must not be a built-in function...
 				if len(e.Args) != 0 {
 					panic("I don't know how to handle functions with arguments yet...")
 				}
-				v.Append(x86.RawAssembly("\tcall main_"+fn.Name+" # FIXME this assumes no return value!"))
+				// FIXME: I assume here that there is no return value!
+				v.Append(x86.Commented(x86.Call(x86.Symbol("main_"+fn.Name)),
+					fmt.Sprint(pos.Filename, ": line ", pos.Line)))
 			}
 		} else {
 			panic(fmt.Sprintf("I don't know how to deal with complicated function: %s", e.Fun))
@@ -151,10 +159,10 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 func main() {
 	goopt.Parse(func() []string { return nil })
 	if len(goopt.Args) > 0 {
-		x,err := parser.ParseFiles(goopt.Args, 0)
+		x,err := parser.ParseFiles(myfiles, goopt.Args, 0)
 		die(err)
 		fmt.Fprintln(os.Stderr, "Parsed: ", *x["main"])
-		die(typechecker.CheckPackage(x["main"], nil))
+		die(typechecker.CheckPackage(myfiles, x["main"], nil))
 		fmt.Fprintln(os.Stderr, "Checked: ", *x["main"])
 		//for _,a := range x["main"].Files {
 		//	die(printer.Fprint(os.Stdout, a))
