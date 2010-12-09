@@ -94,6 +94,23 @@ func (v *CompileVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 	}
 	return v
 }
+func (v *CompileVisitor) PopType(t ast.Type) {
+	switch t.Form {
+	case ast.Tuple:
+		for _,o := range t.Params.Objects {
+			v.PopType(*o.Type)
+		}
+	case ast.Basic:
+		switch t.N {
+		case ast.String:
+			v.Append(x86.AddL(x86.Imm32(8), x86.ESP))
+		default:
+			panic(fmt.Sprintf("I don't know how to pop basic type %s", t))
+		}
+	default:
+		panic(fmt.Sprintf("I don't know how to pop type %s", t.Form))
+	}
+}
 func (v *CompileVisitor) CompileStatement(statement ast.Stmt) {
 	switch s := statement.(type) {
 	case *ast.EmptyStmt:
