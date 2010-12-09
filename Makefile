@@ -8,5 +8,6 @@ DEPS=elf x86
 TARG=go
 GOFILES=\
 	go.go\
+	expression-types.go\
 
 include $(GOROOT)/src/Make.cmd

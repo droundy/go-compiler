@@ -136,6 +136,11 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 				if len(e.Args) != 1 {
 					panic(fmt.Sprintf("println expects just one argument, not %d", len(e.Args)))
 				}
+				argtype := ExprType(e.Args[0])
+				if argtype.N != ast.String || argtype.Form != ast.Basic {
+					panic(fmt.Sprintf("Argument to println has type %s but should have type string!",
+						argtype))
+				}
 				v.CompileExpression(e.Args[0])
 				v.Append(x86.Commented(x86.Call(x86.Symbol("println")),
 					fmt.Sprint(pos.Filename, ": line ", pos.Line)))
