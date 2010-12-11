@@ -103,8 +103,10 @@ func (v *CompileVisitor) FunctionPostlogue() {
 	// First we roll back the stack from where we started...
 	for v.Stack.Name == "_" {
 		// We need to pop off any extra layers of stack we've added...
-		v.Append(x86.Commented(x86.AddL(x86.Imm32(v.Stack.Size), x86.ESP),
-			"Function "+v.Stack.Name+" stored this much on the stack so far."))
+		if v.Stack.Size > 0 {
+			v.Append(x86.Commented(x86.AddL(x86.Imm32(v.Stack.Size), x86.ESP),
+				"We stored this much on the stack so far."))
+		}
 		// Now jump to the "real" postlogue.  This is a little stupid, but I
 		// expect it'll come in handy when I implement defer (not to mention
 		// panic/recover).
@@ -204,9 +206,11 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 					panic(fmt.Sprintf("Argument to println has type %s but should have type string!",
 						argtype))
 				}
+				v.Stack = v.Stack.New("arguments")
 				v.CompileExpression(e.Args[0])
 				v.Append(x86.Commented(x86.Call(x86.Symbol("println")),
 					fmt.Sprint(pos.Filename, ": line ", pos.Line)))
+				v.Stack = v.Stack.Parent // A hack to let the callee clean up arguments
 			default:
 				// This must not be a built-in function...
 				functype := v.Stack.Lookup(fn.Name)
@@ -216,12 +220,14 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 				if functype.Type().N != 0 {
 					panic("I can't yet handle functions with a return value such as "+fn.Name)
 				}
+				v.Stack = v.Stack.New("arguments")
 				for i:=len(e.Args)-1; i>=0; i-- {
 					v.CompileExpression(e.Args[i])
 				}
 				// FIXME: I assume here that there is no return value!
 				v.Append(x86.Commented(x86.Call(x86.Symbol("main_"+fn.Name)),
 					fmt.Sprint(pos.Filename, ": line ", pos.Line)))
+				v.Stack = v.Stack.Parent // A hack to let the callee clean up arguments
 			}
 		} else {
 			panic(fmt.Sprintf("I don't know how to deal with complicated function: %s", e.Fun))
