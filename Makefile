@@ -9,5 +9,7 @@ TARG=go
 GOFILES=\
 	go.go\
 	expression-types.go\
+	variables.go\
+	types.go\
 
 include $(GOROOT)/src/Make.cmd

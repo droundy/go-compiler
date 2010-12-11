@@ -118,6 +118,29 @@ func (m Memory) W32() string {
 	}
 	return offstr + "(" + bstr + istr + scalestr + ")"
 }
+func (m Memory) Add(off int) Memory {
+	if m.Disp == nil {
+		m.Disp = Imm32(off)
+		return m
+	}
+	if d,ok := m.Disp.(Imm32); ok {
+		m.Disp = d + Imm32(off)
+		return m
+	}
+	if m.Scale == nil {
+		if m.Index == nil {
+			m.Index = Imm32(off)
+			return m
+		} else {
+			switch i := m.Index.(type) {
+			case Imm32:
+				m.Index = i + Imm32(off)
+				return m
+			}
+		}
+	}
+	panic(fmt.Sprintf("I don't know how to add to %s", m))
+}
 func (m Memory) Ptr() string {
 	return m.W32()
 }

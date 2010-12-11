@@ -42,26 +42,56 @@ func (v StringVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 	return v
 }
 
-type Stack struct {
-	offset int
-	sizereturn int
-	locals map[string]int
-	function_name string
-}
-
 type CompileVisitor struct {
 	assembly *[]x86.X86
 	string_literals map[string]string
-	stacks []Stack
+	Stack *Stack
 }
 func (v *CompileVisitor) Append(xs... x86.X86) {
 	*v.assembly = append(*v.assembly, xs...)
 }
-func (v *CompileVisitor) CurrentStack() Stack {
-	return v.stacks[len(v.stacks)-1]
-}
 func (v *CompileVisitor) FunctionPrologue(fn *ast.FuncDecl) {
-	v.stacks = append(v.stacks, Stack{0,0,make(map[string]int), fn.Name.Name})
+	v.Stack = v.Stack.New(fn.Name.Name)
+	ftype := ast.NewType(ast.Function)
+	ftype.N = uint(fn.Type.Results.NumFields())
+	ftype.Params = ast.NewScope(nil)
+	fmt.Println("Working on function", fn.Name.Name)
+	if fn.Type.Results != nil {
+		for _,resultfield := range fn.Type.Results.List {
+			names := []string{"_"}
+			if resultfield.Names != nil {
+				names = []string{}
+				for _,i := range resultfield.Names {
+					names = append(names, i.Name)
+				}
+			}
+			t := TypeExpression(resultfield.Type)
+			for _,n := range names {
+				ftype.Params.Insert(&ast.Object{ ast.Fun, n, t, resultfield, 0 })
+				v.Stack.DefineVariable(n, t)
+			}
+		}
+	}
+	fmt.Println("Stack size after results is", v.Stack.Size)
+	for _,paramfield := range fn.Type.Params.List {
+		names := []string{"_"}
+		if paramfield.Names != nil {
+			names = []string{}
+			for _,i := range paramfield.Names {
+				names = append(names, i.Name)
+			}
+		}
+		t := TypeExpression(paramfield.Type)
+		for _,n := range names {
+			ftype.Params.Insert(&ast.Object{ ast.Fun, n, t, paramfield, 0 })
+			v.Stack.DefineVariable(n, t)
+		}
+	}
+	fmt.Println("Stack size after params is", v.Stack.Size)
+	v.Stack.DefineVariable("return", IntType)
+	fmt.Println("Stack size after return is", v.Stack.Size)
+	v.Stack = v.Stack.New("_")
+	DefineGlobal(fn.Name.Name, ftype)
 	// symbol for the start name
 	pos := myfiles.Position(fn.Pos())
 	v.Append(x86.Commented(x86.GlobalSymbol("main_"+fn.Name.Name),
@@ -71,11 +101,16 @@ func (v *CompileVisitor) FunctionPrologue(fn *ast.FuncDecl) {
 }
 func (v *CompileVisitor) FunctionPostlogue() {
 	// First we roll back the stack from where we started...
-	v.Append(x86.AddL(x86.Imm32(v.CurrentStack().offset), x86.ESP))
-	// Now jump to the "real" postlogue.  This is a little stupid, but I
-	// expect it'll come in handy when I implement defer (not to mention
-	// panic/recover).
-	v.Append(x86.Jmp(x86.Symbol("return_" + v.CurrentStack().function_name)))
+	for v.Stack.Name == "_" {
+		// We need to pop off any extra layers of stack we've added...
+		v.Append(x86.Commented(x86.AddL(x86.Imm32(v.Stack.Size), x86.ESP),
+			"Function "+v.Stack.Name+" stored this much on the stack so far."))
+		// Now jump to the "real" postlogue.  This is a little stupid, but I
+		// expect it'll come in handy when I implement defer (not to mention
+		// panic/recover).
+		v.Stack = v.Stack.Parent // We've popped off the arguments...
+	}
+	v.Append(x86.Jmp(x86.Symbol("return_" + v.Stack.Name)))
 }
 
 func (v *CompileVisitor) Visit(n0 interface{}) (w ast.Visitor) {
@@ -87,9 +122,15 @@ func (v *CompileVisitor) Visit(n0 interface{}) (w ast.Visitor) {
 		}
 		v.FunctionPostlogue()
 		v.Append(x86.GlobalSymbol("return_"+n.Name.Name))
+		// Pop off function arguments...
+		// FIXME this would also pop off return values...
+		v.Append(x86.Commented(x86.PopL(x86.EAX), "Pop the return address"))
+		fmt.Println("Function", v.Stack.Name, "has stack size", v.Stack.Size)
+		v.Append(x86.Commented(x86.AddL(x86.Imm32(v.Stack.Size - 4), x86.ESP),
+			"Popping "+v.Stack.Name+" arguments."))
 		// Then we return!
-		v.Append(x86.Return("from main_"+v.CurrentStack().function_name))
-		v.stacks = v.stacks[:len(v.stacks)-1]
+		v.Append(x86.RawAssembly("\tjmp *%eax"))
+		v.Stack = v.Stack.Parent
 		return nil // No need to peek inside the func declaration!
 	}
 	return v
@@ -117,6 +158,11 @@ func (v *CompileVisitor) CompileStatement(statement ast.Stmt) {
 		// It is empty, I can handle that!
 	case *ast.ExprStmt:
 		v.CompileExpression(s.X)
+		t := ExprType(s.X, v.Stack)
+		switch t.Form {
+		case ast.Tuple:
+			
+		}
 	case *ast.ReturnStmt:
 		if len(s.Results) != 0 {
 			panic("I can't handle return statements with values just yet...")
@@ -153,7 +199,7 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 				if len(e.Args) != 1 {
 					panic(fmt.Sprintf("println expects just one argument, not %d", len(e.Args)))
 				}
-				argtype := ExprType(e.Args[0])
+				argtype := ExprType(e.Args[0], v.Stack)
 				if argtype.N != ast.String || argtype.Form != ast.Basic {
 					panic(fmt.Sprintf("Argument to println has type %s but should have type string!",
 						argtype))
@@ -163,8 +209,15 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 					fmt.Sprint(pos.Filename, ": line ", pos.Line)))
 			default:
 				// This must not be a built-in function...
-				if len(e.Args) != 0 {
-					panic("I don't know how to handle functions with arguments yet...")
+				functype := v.Stack.Lookup(fn.Name)
+				if functype.Type().Form != ast.Function {
+					panic("Function "+ fn.Name + " is not actually a function!")
+				}
+				if functype.Type().N != 0 {
+					panic("I can't yet handle functions with a return value such as "+fn.Name)
+				}
+				for i:=len(e.Args)-1; i>=0; i-- {
+					v.CompileExpression(e.Args[i])
 				}
 				// FIXME: I assume here that there is no return value!
 				v.Append(x86.Commented(x86.Call(x86.Symbol("main_"+fn.Name)),
@@ -173,8 +226,26 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 		} else {
 			panic(fmt.Sprintf("I don't know how to deal with complicated function: %s", e.Fun))
 		}
+	case *ast.Ident:
+		evar := v.Stack.Lookup(e.Name)
+		switch SizeOnStack(evar.Type()) {
+		case 4:
+			v.Append(x86.Commented(x86.MovL(evar.InMemory(), x86.EAX), "Reading variable "+e.Name))
+			v.Append(x86.PushL(x86.EAX))
+			v.Stack.DefineVariable("_", evar.Type())
+		case 8:
+			v.Append(x86.Comment(fmt.Sprintf("The offset of %s is %s", e.Name, evar.InMemory())))
+			v.Append(x86.Commented(x86.MovL(evar.InMemory().Add(4), x86.EAX),
+				"Reading variable "+e.Name))
+			v.Append(x86.MovL(evar.InMemory(), x86.EBX))
+			v.Append(x86.PushL(x86.EAX))
+			v.Append(x86.PushL(x86.EBX))
+			v.Stack.DefineVariable("_", evar.Type())
+		default:
+			panic(fmt.Sprintf("I don't handle variables with length %s", SizeOnStack(evar.Type())))
+		}
 	default:
-		panic(fmt.Sprintf("I can't handle expressions such as: %T", exp))
+		panic(fmt.Sprintf("I can't handle expressions such as: %T value %s", exp, exp))
 	}
 }
 
@@ -191,7 +262,8 @@ func main() {
 		//}
 
 		aaa := x86.StartData
-		var cv = CompileVisitor{assembly: &aaa, string_literals: make(map[string]string)}
+		var bbb *Stack
+		var cv = CompileVisitor{ &aaa, make(map[string]string), bbb.New("global")}
 		ast.Walk(StringVisitor(cv), x["main"])
 
 		cv.Append(x86.StartText...)
