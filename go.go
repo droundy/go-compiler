@@ -31,12 +31,27 @@ func (v StringVisitor) Visit(n0 ast.Node) (w ast.Visitor) {
 			}
 			return -1
 		}
+		fmt.Println("string literals are: ", v.string_literals)
 		if _,ok := v.string_literals[str]; !ok {
 			strname := "string_" + strings.Map(sanitize, str)
+			for {
+				// See if our strname is valid...
+				nameexists := false
+				for _,n := range v.string_literals {
+					if n == strname {
+						nameexists = true
+					}
+				}
+				if !nameexists {
+					break // we've got a unique name already!
+				}
+				strname = strname + "X"
+			}
 			*v.assembly = append(*v.assembly,
 				x86.Symbol(strname),
 				x86.Commented(x86.Ascii(str), "a non-null-terminated string"))
 			v.string_literals[str] = strname
+			fmt.Println("Got new string literal: ", str)
 		}
 	}
 	return v
@@ -80,7 +95,11 @@ func (v *CompileVisitor) FunctionPrologue(fn *ast.FuncDecl) {
 	}
 	fmt.Println("Stack size after results is", v.Stack.Size)
 	v.Stack.ReturnSize = v.Stack.Size
-	for _,paramfield := range fn.Type.Params.List {
+	// The arguments are pushed last argument first, so that eventually
+	// the types of the "later" arguments can depend on the first
+	// arguments, which seems nice to me.
+	for pi:=len(fn.Type.Params.List)-1; pi>=0; pi-- {
+		paramfield := fn.Type.Params.List[pi]
 		names := []string{"_"}
 		if paramfield.Names != nil {
 			names = []string{}
@@ -89,7 +108,8 @@ func (v *CompileVisitor) FunctionPrologue(fn *ast.FuncDecl) {
 			}
 		}
 		t := TypeExpression(paramfield.Type)
-		for _,n := range names {
+		for i:=len(names)-1; i>=0; i-- {
+			n := names[i]
 			ftype.Params.Insert(&ast.Object{ ast.Fun, n, t, paramfield, 0 })
 			v.Stack.DefineVariable(n, t)
 
@@ -211,18 +231,18 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 		if fn,ok := e.Fun.(*ast.Ident); ok {
 			pos := myfiles.Position(fn.Pos())
 			switch fn.Name {
-			case "println":
+			case "println", "print":
 				if len(e.Args) != 1 {
-					panic(fmt.Sprintf("println expects just one argument, not %d", len(e.Args)))
+					panic(fmt.Sprintf("%s expects just one argument, not %d", fn.Name, len(e.Args)))
 				}
 				argtype := ExprType(e.Args[0], v.Stack)
 				if argtype.N != ast.String || argtype.Form != ast.Basic {
-					panic(fmt.Sprintf("Argument to println has type %s but should have type string!",
-						argtype))
+					panic(fmt.Sprintf("Argument to %s has type %s but should have type string!",
+						fn.Name, argtype))
 				}
 				v.Stack = v.Stack.New("arguments")
 				v.CompileExpression(e.Args[0])
-				v.Append(x86.Commented(x86.Call(x86.Symbol("println")),
+				v.Append(x86.Commented(x86.Call(x86.Symbol(fn.Name)),
 					fmt.Sprint(pos.Filename, ": line ", pos.Line)))
 				v.Stack = v.Stack.Parent // A hack to let the callee clean up arguments
 			default:

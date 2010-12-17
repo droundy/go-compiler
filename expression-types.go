@@ -22,6 +22,8 @@ func ExprType(e0 ast.Expr, s *Stack) (t *ast.Type) {
 			switch fn.Name {
 			case "println":
 				return ast.NewType(ast.Tuple)
+			case "print":
+				return ast.NewType(ast.Tuple)
 			default:
 				ftype := s.Lookup(fn.Name).Type()
 				switch ftype.N {
