@@ -18,7 +18,7 @@ import (
 var myfiles = token.NewFileSet()
 
 type StringVisitor CompileVisitor
-func (v StringVisitor) Visit(n0 interface{}) (w ast.Visitor) {
+func (v StringVisitor) Visit(n0 ast.Node) (w ast.Visitor) {
 	//fmt.Printf("in StringVisitor, n0 is %s of type %T\n", n0, n0)
 	if n,ok := n0.(*ast.BasicLit); ok && n != nil && n.Kind == token.STRING {
 		str,err := strconv.Unquote(string(n.Value))
@@ -115,7 +115,7 @@ func (v *CompileVisitor) FunctionPostlogue() {
 	v.Append(x86.Jmp(x86.Symbol("return_" + v.Stack.Name)))
 }
 
-func (v *CompileVisitor) Visit(n0 interface{}) (w ast.Visitor) {
+func (v *CompileVisitor) Visit(n0 ast.Node) (w ast.Visitor) {
 	// The following only handles functions (not methods)
 	if n,ok := n0.(*ast.FuncDecl); ok && n.Recv == nil {
 		v.FunctionPrologue(n)
