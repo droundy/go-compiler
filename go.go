@@ -71,6 +71,10 @@ func (v *CompileVisitor) FunctionPrologue(fn *ast.FuncDecl) {
 				ftype.Params.Insert(&ast.Object{ ast.Fun, n, t, resultfield, 0 })
 				resultnum++
 				v.Stack.DefineVariable(n, t, fmt.Sprintf("return_value_%d", resultnum))
+
+				// The return values are actually allocated elsewhere... here
+				// we just need to define the function type properly so it
+				// gets called properly.
 			}
 		}
 	}
@@ -88,6 +92,10 @@ func (v *CompileVisitor) FunctionPrologue(fn *ast.FuncDecl) {
 		for _,n := range names {
 			ftype.Params.Insert(&ast.Object{ ast.Fun, n, t, paramfield, 0 })
 			v.Stack.DefineVariable(n, t)
+
+			// The function parameters are actually allocated
+			// elsewhere... here we just need to define the function type
+			// properly so it gets called properly.
 		}
 	}
 	fmt.Println("Stack size after params is", v.Stack.Size)
@@ -195,6 +203,7 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 			v.Append(
 				x86.Commented(x86.PushL(x86.Symbol(n)), "Pushing string literal "+string(e.Value)),
 				x86.PushL(x86.Imm32(len(str))))
+			v.Stack.Push(StringType) // let the stack know we've pushed a literal
 		default:
 			panic(fmt.Sprintf("I don't know how to deal with literal: %s", e))
 		}
@@ -222,8 +231,11 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 				if functype.Type().Form != ast.Function {
 					panic("Function "+ fn.Name + " is not actually a function!")
 				}
-				if functype.Type().N != 0 {
-					panic("I can't yet handle functions with a return value such as "+fn.Name)
+				for i:=0; i<int(functype.Type().N); i++ {
+					// Put zeros on the stack for the return values (and define these things)
+					v.Stack.DefineVariable(functype.Type().Params.Objects[i].Name,
+						functype.Type().Params.Objects[i].Type,
+						fmt.Sprintf("return_value_%d", i))
 				}
 				v.Stack = v.Stack.New("arguments")
 				for i:=len(e.Args)-1; i>=0; i-- {
@@ -243,7 +255,7 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 		case 4:
 			v.Append(x86.Commented(x86.MovL(evar.InMemory(), x86.EAX), "Reading variable "+e.Name))
 			v.Append(x86.PushL(x86.EAX))
-			v.Stack.DefineVariable("_", evar.Type())
+			v.Stack.DefineVariable("_copy_of_"+e.Name, evar.Type())
 		case 8:
 			v.Append(x86.Comment(fmt.Sprintf("The offset of %s is %s", e.Name, evar.InMemory())))
 			v.Append(x86.Commented(x86.MovL(evar.InMemory().Add(4), x86.EAX),
@@ -251,7 +263,7 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 			v.Append(x86.MovL(evar.InMemory(), x86.EBX))
 			v.Append(x86.PushL(x86.EAX))
 			v.Append(x86.PushL(x86.EBX))
-			v.Stack.DefineVariable("_", evar.Type())
+			v.Stack.DefineVariable("_copy_of_"+e.Name, evar.Type())
 		default:
 			panic(fmt.Sprintf("I don't handle variables with length %s", SizeOnStack(evar.Type())))
 		}
@@ -262,6 +274,19 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 
 func (v *CompileVisitor) PopTo(vname string) {
 	v.Append(v.Stack.PopTo(vname))
+}
+
+func (v *CompileVisitor) Declare(vname string, t *ast.Type) {
+	switch SizeOnStack(t) {
+	case 4:
+		v.Append(x86.Commented(x86.PushL(x86.Imm32(0)), "This is variable "+vname))
+	case 8:
+		v.Append(x86.Commented(x86.PushL(x86.Imm32(0)), "This is variable "+vname))
+		v.Append(x86.Commented(x86.PushL(x86.Imm32(0)), "This is variable "+vname))
+	default:
+		panic(fmt.Sprintf("I don't handle variables with length %s", SizeOnStack(t)))
+	}
+	v.Stack.DefineVariable(vname, t)
 }
 
 func main() {

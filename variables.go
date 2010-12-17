@@ -82,6 +82,13 @@ func (s *Stack) Pop(t *ast.Type) int {
 	return off
 }
 
+// Pop returns the offset to be added to the stack pointer
+func (s *Stack) Push(t *ast.Type) int {
+	off := SizeOnStack(t)
+	s.Size += off
+	return off
+}
+
 // PopTo returns code to save data from the stack into the variable.
 // It also changes the stack size accordingly.
 func (s *Stack) PopTo(name string) x86.X86 {
@@ -90,20 +97,31 @@ func (s *Stack) PopTo(name string) x86.X86 {
 	if TypeToSize(v.Type()) != off {
 		panic("I can't yet handle types with sizes that aren't a multiple of 4")
 	}
-	s.Size -= off
+	comment := "Popping to variable "+v.Name()
+	if v.Name() == "_" {
+		comment = fmt.Sprint("Popping to ",name," of type ",PrettyType(v.Type()), " at ", v.InMemory())
+	}
+	code := []x86.X86{x86.Comment(s.PrettyComments())}
 	switch off {
 	case 4:
+		s.Size -= off
+		vnew := s.Lookup(name) // Its location relative to stack may have changed!
 		return x86.RawAssembly(x86.Assembly([]x86.X86{
 			x86.PopL(x86.EAX),
-			x86.Commented(x86.MovL(x86.EAX, v.InMemory()), "Popping to variable "+v.Name()),
+			x86.Commented(x86.MovL(x86.EAX, vnew.InMemory()), comment),
 		}))
 	case 8:
-		return x86.RawAssembly(x86.Assembly([]x86.X86{
+		s.Size -= 4
+		vnew := s.Lookup(name) // Its location relative to stack may have changed!
+		code = append(code,
 			x86.PopL(x86.EAX),
-			x86.Commented(x86.MovL(x86.EAX, v.InMemory().Add(4)), "Popping to variable "+v.Name()),
+			x86.Commented(x86.MovL(x86.EAX, vnew.InMemory()), comment))
+		s.Size -= 4
+		vnew = s.Lookup(name) // Its location relative to stack may have changed again!
+		code = append(code,
 			x86.PopL(x86.EAX),
-			x86.Commented(x86.MovL(x86.EAX, v.InMemory()), "Popping to variable "+v.Name()),
-		}))
+			x86.Commented(x86.MovL(x86.EAX, vnew.InMemory().Add(4)), comment))
+		return x86.RawAssembly(x86.Assembly(code))
 	default:
 		panic(fmt.Sprintf("I don't pop variables with length %s", SizeOnStack(v.Type())))
 	}
@@ -136,4 +154,17 @@ func (s *Stack) Lookup(name string) (out Variable) {
 func (s *Stack) New(name string) *Stack {
 	n := Stack{ s, make(map[string]StackVariable), 0, 0, name }
 	return &n
+}
+
+func (s *Stack) PrettyComments() string {
+	if s == nil {
+		return ""
+	}
+	out := "\n# Stack: " + s.Name
+	for vn,v := range s.Vars {
+		out += fmt.Sprint("\n#   ", v.Name(), " (", vn, ") size: ", SizeOnStack(v.Type()),
+			" type: ", PrettyType(v.Type()), " offset: ", v.Offset)
+	}
+	out += s.Parent.PrettyComments()
+	return out
 }
