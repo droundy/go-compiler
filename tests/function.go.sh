@@ -4,4 +4,7 @@ set -ev
 
 ./function
 
-./function | grep 'Hello world'
+./function 2> err
+diff -u err - <<EOF
+Hello world!
+EOF

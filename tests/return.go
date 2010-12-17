@@ -1,7 +1,7 @@
 package main
 
 func sayhi() string {
-	return "Hello world!\n"
+	return "Hello world!"
 }
 
 func echo(x string) string {

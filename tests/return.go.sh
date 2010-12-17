@@ -4,4 +4,7 @@ set -ev
 
 ./return
 
-./return | grep 'Hello world'
+./return 2> err
+diff -u err - <<EOF
+Hello world!
+EOF

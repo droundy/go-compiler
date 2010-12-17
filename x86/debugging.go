@@ -31,12 +31,30 @@ var Debugging = []X86{
 	RawAssembly(`
 #  Debug utility routines!
 
+print:
+	movl 4(%esp), %edx # read the length
+	movl 8(%esp), %ecx # pop the pointer to the string
+	movl $2, %ebx	# first argument: file handle (stderr)
+	movl $4, %eax	# system call number (sys_write)
+	int $128
+	popl %eax # store the return address
+  addl $8, %esp # get rid of the two arguments
+	jmp *%eax # return from println
+
 println:
 	movl 4(%esp), %edx # read the length
 	movl 8(%esp), %ecx # pop the pointer to the string
-	movl $1, %ebx	# first argument: file handle (stdout)
+	movl $2, %ebx	# first argument: file handle (stderr)
 	movl $4, %eax	# system call number (sys_write)
 	int $128
+  # now we want to write a newline...
+  movl $10, 4(%esp) # a newline
+	movl $1, %edx # the length
+	movl %esp, %ecx # the pointer
+  addl $4, %ecx
+	movl $2, %ebx	# first argument: file handle (stderr)
+	movl $4, %eax	# system call number (sys_write)
+  int $128
 	popl %eax # store the return address
   addl $8, %esp # get rid of the two arguments
 	jmp *%eax # return from println

@@ -5,5 +5,5 @@ func sayhi(arg string) {
 }
 
 func main() {
-	sayhi("Hello world!\n")
+	sayhi("Hello world!")
 }
