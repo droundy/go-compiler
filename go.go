@@ -233,9 +233,8 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 				}
 				for i:=0; i<int(functype.Type().N); i++ {
 					// Put zeros on the stack for the return values (and define these things)
-					v.Stack.DefineVariable(functype.Type().Params.Objects[i].Name,
-						functype.Type().Params.Objects[i].Type,
-						fmt.Sprintf("return_value_%d", i))
+					v.Declare(functype.Type().Params.Objects[i].Name,
+						functype.Type().Params.Objects[i].Type)
 				}
 				v.Stack = v.Stack.New("arguments")
 				for i:=len(e.Args)-1; i>=0; i-- {
