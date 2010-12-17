@@ -107,11 +107,11 @@ func (v *CompileVisitor) FunctionPostlogue() {
 			v.Append(x86.Commented(x86.AddL(x86.Imm32(v.Stack.Size), x86.ESP),
 				"We stored this much on the stack so far."))
 		}
-		// Now jump to the "real" postlogue.  This is a little stupid, but I
-		// expect it'll come in handy when I implement defer (not to mention
-		// panic/recover).
 		v.Stack = v.Stack.Parent // We've popped off the arguments...
 	}
+	// Now jump to the "real" postlogue.  This is a little stupid, but I
+	// expect it'll come in handy when I implement defer (not to mention
+	// panic/recover).
 	v.Append(x86.Jmp(x86.Symbol("return_" + v.Stack.Name)))
 }
 
