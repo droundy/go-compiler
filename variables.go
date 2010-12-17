@@ -9,11 +9,12 @@ import (
 type Variable interface {
 	InMemory() x86.Memory
 	Type() *ast.Type
+	Name() string
 }
 
 type StackVariable struct {
 	T *ast.Type
-	Name string
+	N string
 	Offset int
 }
 
@@ -23,17 +24,23 @@ func (v *StackVariable) InMemory() x86.Memory {
 func (v *StackVariable) Type() *ast.Type {
 	return v.T
 }
+func (v *StackVariable) Name() string {
+	return v.N
+}
 
 type GlobalVariable struct {
 	T *ast.Type
-	Name string
+	N string
 }
 
 func (g *GlobalVariable) InMemory() x86.Memory {
-	return x86.Memory{x86.Symbol(g.Name),nil,nil,nil}
+	return x86.Memory{x86.Symbol(g.N),nil,nil,nil}
 }
 func (v *GlobalVariable) Type() *ast.Type {
 	return v.T
+}
+func (v *GlobalVariable) Name() string {
+	return v.N
 }
 
 // All global variables are accessible via Globals.
@@ -49,18 +56,22 @@ type Stack struct {
 	Parent *Stack
 	Vars map[string]StackVariable
 	Size int
+	ReturnSize int
 	Name string
 }
 
 // DefineVariable returns the offset to be subtracted from the stack
 // pointer
-func (s *Stack) DefineVariable(name string, t *ast.Type) int {
+func (s *Stack) DefineVariable(name string, t *ast.Type, synonymns ...string) int {
 	if _,ok := s.Vars[name]; ok && name != "_" {
 		panic(fmt.Sprintf("Cannot define already existing variable %s", name))
 	}
 	off := SizeOnStack(t)
 	s.Size += off
 	s.Vars[name] = StackVariable{ t, name, s.Size }
+	for _,n := range synonymns {
+		s.Vars[n] = StackVariable{ t, name, s.Size }
+	}
 	return off
 }
 
@@ -69,6 +80,34 @@ func (s *Stack) Pop(t *ast.Type) int {
 	off := SizeOnStack(t)
 	s.Size -= off
 	return off
+}
+
+// PopTo returns code to save data from the stack into the variable.
+// It also changes the stack size accordingly.
+func (s *Stack) PopTo(name string) x86.X86 {
+	v := s.Lookup(name)
+	off := SizeOnStack(v.Type())
+	if TypeToSize(v.Type()) != off {
+		panic("I can't yet handle types with sizes that aren't a multiple of 4")
+	}
+	s.Size -= off
+	switch off {
+	case 4:
+		return x86.RawAssembly(x86.Assembly([]x86.X86{
+			x86.PopL(x86.EAX),
+			x86.Commented(x86.MovL(x86.EAX, v.InMemory()), "Popping to variable "+v.Name()),
+		}))
+	case 8:
+		return x86.RawAssembly(x86.Assembly([]x86.X86{
+			x86.PopL(x86.EAX),
+			x86.Commented(x86.MovL(x86.EAX, v.InMemory().Add(4)), "Popping to variable "+v.Name()),
+			x86.PopL(x86.EAX),
+			x86.Commented(x86.MovL(x86.EAX, v.InMemory()), "Popping to variable "+v.Name()),
+		}))
+	default:
+		panic(fmt.Sprintf("I don't pop variables with length %s", SizeOnStack(v.Type())))
+	}
+	panic("This can't happen")
 }
 
 func (s *Stack) Lookup(name string) (out Variable) {
@@ -95,6 +134,6 @@ func (s *Stack) Lookup(name string) (out Variable) {
 }
 
 func (s *Stack) New(name string) *Stack {
-	n := Stack{ s, make(map[string]StackVariable), 0, name }
+	n := Stack{ s, make(map[string]StackVariable), 0, 0, name }
 	return &n
 }

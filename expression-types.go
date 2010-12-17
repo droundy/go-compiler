@@ -23,9 +23,16 @@ func ExprType(e0 ast.Expr, s *Stack) (t *ast.Type) {
 			case "println":
 				return ast.NewType(ast.Tuple)
 			default:
-				// FIXME: this assumes all functions return no values, which
-				// is clearly false.
-				return ast.NewType(ast.Tuple)
+				ftype := s.Lookup(fn.Name).Type()
+				switch ftype.N {
+				case 0:
+					// This is a function with no return value: easy!
+					return ast.NewType(ast.Tuple)
+				case 1:
+					return ftype.Params.Objects[0].Type
+				default:
+					panic("I don't yet do multiple return types...")
+				}
 			}
 		default:
 			panic(fmt.Sprintf("Can't handle function of weird type %T", e.Fun))

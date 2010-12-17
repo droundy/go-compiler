@@ -57,6 +57,7 @@ func (v *CompileVisitor) FunctionPrologue(fn *ast.FuncDecl) {
 	ftype.Params = ast.NewScope(nil)
 	fmt.Println("Working on function", fn.Name.Name)
 	if fn.Type.Results != nil {
+		resultnum := 0
 		for _,resultfield := range fn.Type.Results.List {
 			names := []string{"_"}
 			if resultfield.Names != nil {
@@ -68,11 +69,13 @@ func (v *CompileVisitor) FunctionPrologue(fn *ast.FuncDecl) {
 			t := TypeExpression(resultfield.Type)
 			for _,n := range names {
 				ftype.Params.Insert(&ast.Object{ ast.Fun, n, t, resultfield, 0 })
-				v.Stack.DefineVariable(n, t)
+				resultnum++
+				v.Stack.DefineVariable(n, t, fmt.Sprintf("return_value_%d", resultnum))
 			}
 		}
 	}
 	fmt.Println("Stack size after results is", v.Stack.Size)
+	v.Stack.ReturnSize = v.Stack.Size
 	for _,paramfield := range fn.Type.Params.List {
 		names := []string{"_"}
 		if paramfield.Names != nil {
@@ -124,11 +127,11 @@ func (v *CompileVisitor) Visit(n0 ast.Node) (w ast.Visitor) {
 		}
 		v.FunctionPostlogue()
 		v.Append(x86.GlobalSymbol("return_"+n.Name.Name))
-		// Pop off function arguments...
-		// FIXME this would also pop off return values...
 		v.Append(x86.Commented(x86.PopL(x86.EAX), "Pop the return address"))
+		// Pop off function arguments...
 		fmt.Println("Function", v.Stack.Name, "has stack size", v.Stack.Size)
-		v.Append(x86.Commented(x86.AddL(x86.Imm32(v.Stack.Size - 4), x86.ESP),
+		fmt.Println("Function", v.Stack.Name, "has return values size", v.Stack.ReturnSize)
+		v.Append(x86.Commented(x86.AddL(x86.Imm32(v.Stack.Size - 4 - v.Stack.ReturnSize), x86.ESP),
 			"Popping "+v.Stack.Name+" arguments."))
 		// Then we return!
 		v.Append(x86.RawAssembly("\tjmp *%eax"))
@@ -166,8 +169,10 @@ func (v *CompileVisitor) CompileStatement(statement ast.Stmt) {
 			
 		}
 	case *ast.ReturnStmt:
-		if len(s.Results) != 0 {
-			panic("I can't handle return statements with values just yet...")
+		for resultnum,e := range s.Results {
+			vname := fmt.Sprintf("return_value_%d", resultnum+1)
+			v.CompileExpression(e)
+			v.PopTo(vname)
 		}
 		v.FunctionPostlogue()
 	default:
@@ -253,6 +258,10 @@ func (v *CompileVisitor) CompileExpression(exp ast.Expr) {
 	default:
 		panic(fmt.Sprintf("I can't handle expressions such as: %T value %s", exp, exp))
 	}
+}
+
+func (v *CompileVisitor) PopTo(vname string) {
+	v.Append(v.Stack.PopTo(vname))
 }
 
 func main() {
